@@ -10,13 +10,11 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 import os
 
-DATABASE_URL = "sqlite:////tmp/mova.db"
+# ✅ CAMBIO PRINCIPAL: Usar ruta relativa en lugar de /tmp (escribible en Railway)
+DATABASE_URL = "sqlite:///./mova.db"
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440
-
-# Asegurar que /tmp existe
-os.makedirs("/tmp", exist_ok=True)
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -52,7 +50,6 @@ def _truncate_password_to_72_bytes(password: str) -> str:
     """
     password_bytes = password.encode('utf-8')
     if len(password_bytes) > 72:
-        # Truncar a 72 bytes y decodificar, ignorando bytes incompletos
         password = password_bytes[:72].decode('utf-8', errors='ignore')
     return password
 
@@ -66,7 +63,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     try:
         plain_limited = _truncate_password_to_72_bytes(plain)
         return pwd_context.verify(plain_limited, hashed)
-    except Exception as e:
+    except Exception:
         return False
 
 def create_access_token(data: dict):
@@ -130,7 +127,7 @@ def crear_admin():
             )
             session.add(new_admin)
             session.commit()
-    except Exception as e:
+    except Exception:
         session.rollback()
     finally:
         session.close()
@@ -146,17 +143,22 @@ async def root():
 @app.post("/reset-db")
 async def reset_database():
     """
-    PELIGROSO: Elimina completamente la base de datos y la recrea.
-    Úsalo solo en desarrollo o cuando necesites limpiar todo.
+    Elimina completamente la base de datos y la recrea.
     Recrea el usuario admin con credenciales admin/admin.
+    ⚠️ SOLO USAR EN DESARROLLO
     """
     try:
+        # ✅ CAMBIO: Usar ruta relativa en lugar de /tmp
+        db_path = "./mova.db"
+        
+        # Cerrar cualquier conexión abierta
+        engine.dispose()
+        
         # Eliminar el archivo de BD si existe
-        db_path = "/tmp/mova.db"
         if os.path.exists(db_path):
             os.remove(db_path)
         
-        # Eliminar todas las tablas
+        # Eliminar todas las tablas de la BD
         Base.metadata.drop_all(bind=engine)
         
         # Recrear todas las tablas
@@ -166,9 +168,10 @@ async def reset_database():
         crear_admin()
         
         return {
-            "mensaje": "✅ Base de datos eliminada y reiniciada",
+            "mensaje": "✅ Base de datos eliminada y reiniciada correctamente",
             "admin_user": "admin",
-            "admin_password": "admin"
+            "admin_password": "admin",
+            "login_url": "/docs#/default/login_login_post"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al resetear BD: {str(e)}")
