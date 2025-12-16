@@ -41,12 +41,16 @@ Base.metadata.create_all(bind=engine)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-def hash_password(password):
-    return pwd_context.hash(password)
+def hash_password(password: str) -> str:
+    # bcrypt tiene un límite máximo de 72 bytes
+    password_limited = password[:72] if len(password.encode()) > 72 else password
+    return pwd_context.hash(password_limited)
 
-def verify_password(plain, hashed):
+def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(plain, hashed)
+        # bcrypt tiene un límite máximo de 72 bytes
+        plain_limited = plain[:72] if len(plain.encode()) > 72 else plain
+        return pwd_context.verify(plain_limited, hashed)
     except:
         return False
 
