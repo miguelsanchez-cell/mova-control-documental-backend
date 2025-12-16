@@ -143,6 +143,36 @@ async def root():
     """Endpoint de salud."""
     return {"status": "ok"}
 
+@app.post("/reset-db")
+async def reset_database():
+    """
+    PELIGROSO: Elimina completamente la base de datos y la recrea.
+    Úsalo solo en desarrollo o cuando necesites limpiar todo.
+    Recrea el usuario admin con credenciales admin/admin.
+    """
+    try:
+        # Eliminar el archivo de BD si existe
+        db_path = "/tmp/mova.db"
+        if os.path.exists(db_path):
+            os.remove(db_path)
+        
+        # Eliminar todas las tablas
+        Base.metadata.drop_all(bind=engine)
+        
+        # Recrear todas las tablas
+        Base.metadata.create_all(bind=engine)
+        
+        # Crear admin nuevamente
+        crear_admin()
+        
+        return {
+            "mensaje": "✅ Base de datos eliminada y reiniciada",
+            "admin_user": "admin",
+            "admin_password": "admin"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al resetear BD: {str(e)}")
+
 @app.post("/setup-admin")
 async def setup_admin():
     """Endpoint para crear/verificar el usuario administrador."""
@@ -266,6 +296,5 @@ async def actualizar_documento(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
 
 
