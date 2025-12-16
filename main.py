@@ -1,110 +1,105 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
+from datetime import datetime
+import bcrypt
 import os
+import jwt
+import json
+from typing import Optional
 
+# ===== CONFIGURACIÓN DE LA BASE DE DATOS =====
 DATABASE_URL = "sqlite:///./mova.db"
-SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440
-
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# ===== MODELOS DE BASE DE DATOS =====
 class Usuario(Base):
     __tablename__ = "usuarios"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    password_hash = Column(String)
-    rol = Column(String, default="viewer")
+    username = Column(String(100), primary_key=True)
+    password_hash = Column(String(255))
+    rol = Column(String(20), default="user")
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
 
 class Documento(Base):
     __tablename__ = "documentos"
-    id = Column(Integer, primary_key=True, index=True)
-    grupo = Column(String)
-    cema = Column(String)
-    comeq = Column(String)
-    tipo_documento = Column(String)
-    vigencia_desde = Column(String)
-    vigencia_hasta = Column(String)
-    estado = Column(String)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    titulo = Column(String(200), nullable=False)
+    contenido = Column(Text, nullable=False)
+    autor = Column(String(100), nullable=False)
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
+    fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+# ===== CREAR TABLAS =====
 Base.metadata.create_all(bind=engine)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-def _truncate_password_to_72_bytes(password: str) -> str:
-    """
-    Trunca una contraseña a máximo 72 bytes (límite de bcrypt).
-    Maneja caracteres multi-byte correctamente en UTF-8.
-    """
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
-    return password
-
-def hash_password(password: str) -> str:
-    """Hashea una contraseña usando bcrypt con límite de 72 bytes."""
-    password_limited = _truncate_password_to_72_bytes(password)
-    return pwd_context.hash(password_limited)
-
-def verify_password(plain: str, hashed: str) -> bool:
-    """Verifica una contraseña contra su hash bcrypt."""
-    try:
-        plain_limited = _truncate_password_to_72_bytes(plain)
-        return pwd_context.verify(plain_limited, hashed)
-    except Exception:
-        return False
-
-def create_access_token(data: dict):
-    """Crea un JWT token."""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Obtiene el usuario actual desde el JWT token."""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="No autorizado")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    
-    session = SessionLocal()
-    user = session.query(Usuario).filter(Usuario.username == username).first()
-    session.close()
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    return {"username": user.username, "rol": user.rol}
-
+# ===== PYDANTIC MODELS =====
 class UsuarioCrear(BaseModel):
     username: str
     password: str
-    rol: str = "viewer"
 
 class DocumentoSchema(BaseModel):
-    grupo: str = ""
-    cema: str = ""
-    comeq: str = ""
-    tipo_documento: str = ""
-    vigencia_desde: str = ""
-    vigencia_hasta: str = ""
-    estado: str = ""
+    id: Optional[int] = None
+    titulo: str
+    contenido: str
+    autor: str
+    fecha_creacion: Optional[datetime] = None
+    fecha_actualizacion: Optional[datetime] = None
 
-app = FastAPI()
+    class Config:
+        from_attributes = True
 
+# ===== FUNCIONES DE UTILIDAD =====
+def hash_password(password: str) -> str:
+    """Hashea la contraseña truncando a 72 bytes (límite de bcrypt)"""
+    password_bytes = password.encode('utf-8')
+    password_truncated = password_bytes[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_truncated, salt).decode('utf-8')
+
+def verify_password(password: str, hash_stored: str) -> bool:
+    """Verifica la contraseña contra el hash almacenado"""
+    password_bytes = password.encode('utf-8')
+    password_truncated = password_bytes[:72]
+    return bcrypt.checkpw(password_truncated, hash_stored.encode('utf-8'))
+
+def get_db():
+    """Dependencia para obtener la sesión de BD"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ===== JWT =====
+SECRET_KEY = "tu_secreto_super_seguro_aqui_12345"
+
+def create_access_token(username: str, rol: str) -> str:
+    """Crea un JWT token"""
+    payload = {
+        "username": username,
+        "rol": rol,
+        "token_type": "bearer"
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return token
+
+def verify_token(token: str) -> dict:
+    """Verifica y decodifica el JWT token"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except:
+        return None
+
+# ===== FASTAPI APP =====
+app = FastAPI(title="Mova Control Documental API")
+
+# ===== CORS =====
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -113,179 +108,205 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def crear_admin():
-    """Crea el usuario administrador si no existe."""
-    session = SessionLocal()
-    try:
-        admin = session.query(Usuario).filter(Usuario.username == "admin").first()
-        if not admin:
-            new_admin = Usuario(
-                username="admin",
-                password_hash=hash_password("admin"),
-                rol="admin"
-            )
-            session.add(new_admin)
-            session.commit()
-    except Exception:
-        session.rollback()
-    finally:
-        session.close()
-
-# Crear admin al iniciar
-crear_admin()
+# ===== ENDPOINTS =====
 
 @app.get("/")
-async def root():
-    """Endpoint de salud."""
-    return {"status": "ok"}
+def root():
+    """Endpoint raíz"""
+    return {"message": "Bienvenido a Mova Control Documental API"}
 
-@app.post("/reset-users")
-async def reset_users_only():
+@app.post("/reset-db")
+def reset_database(db: Session = Depends(get_db)):
     """
-    ⚠️ SOLO resetea la tabla de USUARIOS (NO elimina documentos).
+    PELIGROSO: Elimina completamente la base de datos y la recrea. 
+    Úsalo solo en desarrollo o cuando necesites limpiar todo. 
     Recrea el usuario admin con credenciales admin/admin.
-    USO: Solo en desarrollo cuando necesites limpiar usuarios.
     """
     try:
-        session = SessionLocal()
-        try:
-            # ✅ ELIMINAR SOLO USUARIOS, NUNCA DOCUMENTOS
-            session.query(Usuario).delete()
-            session.commit()
-        finally:
-            session.close()
+        # Eliminar todas las tablas
+        Base.metadata.drop_all(bind=engine)
         
-        # Recrear admin
-        crear_admin()
+        # Recrear todas las tablas
+        Base.metadata.create_all(bind=engine)
+        
+        # Crear usuario admin
+        admin_user = Usuario(
+            username="admin",
+            password_hash=hash_password("admin"),
+            rol="admin"
+        )
+        db.add(admin_user)
+        db.commit()
         
         return {
-            "mensaje": "✅ Usuarios reseteados - Documentos PRESERVADOS",
+            "mensaje": "Base de datos eliminada y reiniciada correctamente",
             "admin_user": "admin",
             "admin_password": "admin",
-            "documentos_preservados": True
+            "login_url": "/docs#/default/login_login_post"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al resetear usuarios: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/reset-users")
+def reset_users_only(db: Session = Depends(get_db)):
+    """
+    Resetea SOLO la tabla de usuarios (preserva documentos).
+    Elimina todos los usuarios existentes y recrea el usuario admin con credenciales admin/admin.
+    Los documentos se mantienen intactos.
+    """
+    try:
+        # Eliminar todos los usuarios
+        db.query(Usuario).delete()
+        db.commit()
+        
+        # Crear usuario admin nuevamente
+        admin_user = Usuario(
+            username="admin",
+            password_hash=hash_password("admin"),
+            rol="admin"
+        )
+        db.add(admin_user)
+        db.commit()
+        
+        # Contar documentos preservados
+        doc_count = db.query(Documento).count()
+        
+        return {
+            "mensaje": "Tabla de usuarios reseteada correctamente",
+            "admin_user": "admin",
+            "admin_password": "admin",
+            "documentos_preservados": doc_count,
+            "login_url": "/docs#/default/login_login_post"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/setup-admin")
-async def setup_admin():
-    """Endpoint para crear/verificar el usuario administrador."""
-    crear_admin()
-    return {"mensaje": "✅ Admin setup completado"}
-
-@app.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Endpoint de login que retorna JWT token."""
-    session = SessionLocal()
+def setup_admin(usuario: UsuarioCrear, db: Session = Depends(get_db)):
+    """Crea el usuario admin inicial"""
     try:
-        user = session.query(Usuario).filter(Usuario.username == form_data.username).first()
-        
-        if not user or not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Credenciales inválidas")
-        
-        token = create_access_token({"sub": user.username})
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "username": user.username,
-            "rol": user.rol
-        }
-    finally:
-        session.close()
-
-@app.get("/me")
-async def get_me(current_user: dict = Depends(get_current_user)):
-    """Obtiene información del usuario actual."""
-    return current_user
-
-@app.post("/register")
-async def register(usuario: UsuarioCrear, current_user: dict = Depends(get_current_user)):
-    """Crea un nuevo usuario (solo admins)."""
-    if current_user['rol'] != 'admin':
-        raise HTTPException(status_code=403, detail="Solo admins pueden crear usuarios")
-    
-    session = SessionLocal()
-    try:
-        existing = session.query(Usuario).filter(Usuario.username == usuario.username).first()
+        existing = db.query(Usuario).filter_by(username=usuario.username).first()
         if existing:
             raise HTTPException(status_code=400, detail="Usuario ya existe")
         
         new_user = Usuario(
             username=usuario.username,
             password_hash=hash_password(usuario.password),
-            rol=usuario.rol
+            rol="admin"
         )
-        session.add(new_user)
-        session.commit()
-        
-        return {
-            "mensaje": "Usuario creado",
-            "username": usuario.username,
-            "rol": usuario.rol
-        }
-    finally:
-        session.close()
+        db.add(new_user)
+        db.commit()
+        return {"mensaje": f"Usuario {usuario.username} creado correctamente con rol admin"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/login")
+def login(username: str, password: str, db: Session = Depends(get_db)):
+    """
+    Endpoint de login que retorna JWT token.
+    """
+    usuario = db.query(Usuario).filter_by(username=username).first()
+    
+    if not usuario or not verify_password(password, usuario.password_hash):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    
+    token = create_access_token(usuario.username, usuario.rol)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": usuario.username,
+        "rol": usuario.rol
+    }
+
+@app.get("/me")
+def get_me(token: str = None, db: Session = Depends(get_db)):
+    """Obtiene información del usuario actual basado en el token JWT"""
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    usuario = db.query(Usuario).filter_by(username=payload["username"]).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    return {
+        "username": usuario.username,
+        "rol": usuario.rol,
+        "fecha_creacion": usuario.fecha_creacion
+    }
+
+@app.post("/register")
+def register(usuario: UsuarioCrear, db: Session = Depends(get_db)):
+    """Registra un nuevo usuario"""
+    existing = db.query(Usuario).filter_by(username=usuario.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Usuario ya existe")
+    
+    new_user = Usuario(
+        username=usuario.username,
+        password_hash=hash_password(usuario.password),
+        rol="user"
+    )
+    db.add(new_user)
+    db.commit()
+    
+    return {"mensaje": f"Usuario {usuario.username} registrado correctamente"}
 
 @app.get("/documentos")
-async def get_documentos(current_user: dict = Depends(get_current_user)):
-    """Obtiene todos los documentos (requiere autenticación)."""
-    session = SessionLocal()
-    try:
-        docs = session.query(Documento).all()
-        return [
-            {
-                "id": d.id,
-                "grupo": d.grupo,
-                "cema": d.cema,
-                "comeq": d.comeq,
-                "tipo_documento": d.tipo_documento,
-                "vigencia_desde": d.vigencia_desde,
-                "vigencia_hasta": d.vigencia_hasta,
-                "estado": d.estado
-            }
-            for d in docs
-        ]
-    finally:
-        session.close()
+def get_documentos(db: Session = Depends(get_db)):
+    """Obtiene todos los documentos"""
+    documentos = db.query(Documento).all()
+    return documentos
+
+@app.post("/documentos")
+def create_documento(documento: DocumentoSchema, db: Session = Depends(get_db)):
+    """Crea un nuevo documento"""
+    nuevo_doc = Documento(
+        titulo=documento.titulo,
+        contenido=documento.contenido,
+        autor=documento.autor
+    )
+    db.add(nuevo_doc)
+    db.commit()
+    db.refresh(nuevo_doc)
+    return nuevo_doc
 
 @app.put("/documentos/{doc_id}")
-async def actualizar_documento(
-    doc_id: int,
-    documento: DocumentoSchema,
-    current_user: dict = Depends(get_current_user)
-):
-    """Actualiza un documento (requiere rol admin o editor)."""
-    if current_user['rol'] not in ['admin', 'editor']:
-        raise HTTPException(status_code=403, detail="No tiene permiso para editar")
+def actualizar_documento(doc_id: int, documento: DocumentoSchema, db: Session = Depends(get_db)):
+    """Actualiza un documento existente"""
+    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
     
-    session = SessionLocal()
-    try:
-        doc = session.query(Documento).filter(Documento.id == doc_id).first()
-        
-        if not doc:
-            raise HTTPException(status_code=404, detail="Documento no encontrado")
-        
-        if documento.tipo_documento:
-            doc.tipo_documento = documento.tipo_documento
-        if documento.vigencia_desde:
-            doc.vigencia_desde = documento.vigencia_desde
-        if documento.vigencia_hasta:
-            doc.vigencia_hasta = documento.vigencia_hasta
-        if documento.estado:
-            doc.estado = documento.estado
-        if documento.grupo:
-            doc.grupo = documento.grupo
-        if documento.cema:
-            doc.cema = documento.cema
-        if documento.comeq:
-            doc.comeq = documento.comeq
-        
-        session.commit()
-        
-        return {"mensaje": "Documento actualizado correctamente", "id": doc_id}
-    finally:
-        session.close()
+    doc.titulo = documento.titulo
+    doc.contenido = documento.contenido
+    doc.autor = documento.autor
+    doc.fecha_actualizacion = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(doc)
+    return doc
 
+@app.delete("/documentos/{doc_id}")
+def delete_documento(doc_id: int, db: Session = Depends(get_db)):
+    """Elimina un documento"""
+    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    db.delete(doc)
+    db.commit()
+    return {"mensaje": "Documento eliminado correctamente"}
+
+# ===== EJECUCIÓN =====
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
