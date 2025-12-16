@@ -8,11 +8,15 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
+import os
 
 DATABASE_URL = "sqlite:////tmp/mova.db"
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+
+# Asegurar que /tmp existe
+os.makedirs("/tmp", exist_ok=True)
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -41,26 +45,39 @@ Base.metadata.create_all(bind=engine)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+def _truncate_password_to_72_bytes(password: str) -> str:
+    """
+    Trunca una contraseña a máximo 72 bytes (límite de bcrypt).
+    Maneja caracteres multi-byte correctamente en UTF-8.
+    """
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        # Truncar a 72 bytes y decodificar, ignorando bytes incompletos
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
+    return password
+
 def hash_password(password: str) -> str:
-    # bcrypt tiene un límite máximo de 72 bytes
-    password_limited = password[:72] if len(password.encode()) > 72 else password
+    """Hashea una contraseña usando bcrypt con límite de 72 bytes."""
+    password_limited = _truncate_password_to_72_bytes(password)
     return pwd_context.hash(password_limited)
 
 def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica una contraseña contra su hash bcrypt."""
     try:
-        # bcrypt tiene un límite máximo de 72 bytes
-        plain_limited = plain[:72] if len(plain.encode()) > 72 else plain
+        plain_limited = _truncate_password_to_72_bytes(plain)
         return pwd_context.verify(plain_limited, hashed)
-    except:
+    except Exception as e:
         return False
 
 def create_access_token(data: dict):
+    """Crea un JWT token."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Obtiene el usuario actual desde el JWT token."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
@@ -101,98 +118,150 @@ app.add_middleware(
 )
 
 def crear_admin():
+    """Crea el usuario administrador si no existe."""
     session = SessionLocal()
-    admin = session.query(Usuario).filter(Usuario.username == "admin").first()
-    if not admin:
-        new_admin = Usuario(username="admin", password_hash=hash_password("admin"), rol="admin")
-        session.add(new_admin)
-        session.commit()
-    session.close()
+    try:
+        admin = session.query(Usuario).filter(Usuario.username == "admin").first()
+        if not admin:
+            new_admin = Usuario(
+                username="admin",
+                password_hash=hash_password("admin"),
+                rol="admin"
+            )
+            session.add(new_admin)
+            session.commit()
+    except Exception as e:
+        session.rollback()
+    finally:
+        session.close()
 
+# Crear admin al iniciar
 crear_admin()
 
 @app.get("/")
 async def root():
+    """Endpoint de salud."""
     return {"status": "ok"}
 
 @app.post("/setup-admin")
 async def setup_admin():
+    """Endpoint para crear/verificar el usuario administrador."""
     crear_admin()
     return {"mensaje": "✅ Admin setup completado"}
 
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Endpoint de login que retorna JWT token."""
     session = SessionLocal()
-    user = session.query(Usuario).filter(Usuario.username == form_data.username).first()
-    session.close()
-    
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    
-    token = create_access_token({"sub": user.username})
-    return {"access_token": token, "token_type": "bearer", "username": user.username, "rol": user.rol}
+    try:
+        user = session.query(Usuario).filter(Usuario.username == form_data.username).first()
+        
+        if not user or not verify_password(form_data.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Credenciales inválidas")
+        
+        token = create_access_token({"sub": user.username})
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "username": user.username,
+            "rol": user.rol
+        }
+    finally:
+        session.close()
 
 @app.get("/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
+    """Obtiene información del usuario actual."""
     return current_user
 
 @app.post("/register")
 async def register(usuario: UsuarioCrear, current_user: dict = Depends(get_current_user)):
+    """Crea un nuevo usuario (solo admins)."""
     if current_user['rol'] != 'admin':
         raise HTTPException(status_code=403, detail="Solo admins pueden crear usuarios")
     
     session = SessionLocal()
-    existing = session.query(Usuario).filter(Usuario.username == usuario.username).first()
-    if existing:
+    try:
+        existing = session.query(Usuario).filter(Usuario.username == usuario.username).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Usuario ya existe")
+        
+        new_user = Usuario(
+            username=usuario.username,
+            password_hash=hash_password(usuario.password),
+            rol=usuario.rol
+        )
+        session.add(new_user)
+        session.commit()
+        
+        return {
+            "mensaje": "Usuario creado",
+            "username": usuario.username,
+            "rol": usuario.rol
+        }
+    finally:
         session.close()
-        raise HTTPException(status_code=400, detail="Usuario ya existe")
-    
-    new_user = Usuario(username=usuario.username, password_hash=hash_password(usuario.password), rol=usuario.rol)
-    session.add(new_user)
-    session.commit()
-    session.close()
-    
-    return {"mensaje": "Usuario creado", "username": usuario.username, "rol": usuario.rol}
 
 @app.get("/documentos")
 async def get_documentos(current_user: dict = Depends(get_current_user)):
+    """Obtiene todos los documentos (requiere autenticación)."""
     session = SessionLocal()
-    docs = session.query(Documento).all()
-    session.close()
-    
-    return [{"id": d.id, "grupo": d.grupo, "cema": d.cema, "comeq": d.comeq, "tipo_documento": d.tipo_documento, "vigencia_desde": d.vigencia_desde, "vigencia_hasta": d.vigencia_hasta, "estado": d.estado} for d in docs]
+    try:
+        docs = session.query(Documento).all()
+        return [
+            {
+                "id": d.id,
+                "grupo": d.grupo,
+                "cema": d.cema,
+                "comeq": d.comeq,
+                "tipo_documento": d.tipo_documento,
+                "vigencia_desde": d.vigencia_desde,
+                "vigencia_hasta": d.vigencia_hasta,
+                "estado": d.estado
+            }
+            for d in docs
+        ]
+    finally:
+        session.close()
 
 @app.put("/documentos/{doc_id}")
-async def actualizar_documento(doc_id: int, documento: DocumentoSchema, current_user: dict = Depends(get_current_user)):
+async def actualizar_documento(
+    doc_id: int,
+    documento: DocumentoSchema,
+    current_user: dict = Depends(get_current_user)
+):
+    """Actualiza un documento (requiere rol admin o editor)."""
     if current_user['rol'] not in ['admin', 'editor']:
         raise HTTPException(status_code=403, detail="No tiene permiso para editar")
     
     session = SessionLocal()
-    doc = session.query(Documento).filter(Documento.id == doc_id).first()
-    
-    if not doc:
+    try:
+        doc = session.query(Documento).filter(Documento.id == doc_id).first()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+        # Actualizar solo campos que tengan valores
+        if documento.tipo_documento:
+            doc.tipo_documento = documento.tipo_documento
+        if documento.vigencia_desde:
+            doc.vigencia_desde = documento.vigencia_desde
+        if documento.vigencia_hasta:
+            doc.vigencia_hasta = documento.vigencia_hasta
+        if documento.estado:
+            doc.estado = documento.estado
+        if documento.grupo:
+            doc.grupo = documento.grupo
+        if documento.cema:
+            doc.cema = documento.cema
+        if documento.comeq:
+            doc.comeq = documento.comeq
+        
+        session.commit()
+        
+        return {"mensaje": "Documento actualizado correctamente", "id": doc_id}
+    finally:
         session.close()
-        raise HTTPException(status_code=404, detail="Documento no encontrado")
-    
-    if documento.tipo_documento:
-        doc.tipo_documento = documento.tipo_documento
-    if documento.vigencia_desde:
-        doc.vigencia_desde = documento.vigencia_desde
-    if documento.vigencia_hasta:
-        doc.vigencia_hasta = documento.vigencia_hasta
-    if documento.estado:
-        doc.estado = documento.estado
-    if documento.grupo:
-        doc.grupo = documento.grupo
-    if documento.cema:
-        doc.cema = documento.cema
-    if documento.comeq:
-        doc.comeq = documento.comeq
-    
-    session.commit()
-    session.close()
-    
-    return {"mensaje": "Documento actualizado correctamente", "id": doc_id}
 
 if __name__ == "__main__":
     import uvicorn
