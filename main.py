@@ -10,7 +10,6 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 import os
 
-# ✅ CAMBIO PRINCIPAL: Usar ruta relativa en lugar de /tmp (escribible en Railway)
 DATABASE_URL = "sqlite:///./mova.db"
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
 ALGORITHM = "HS256"
@@ -140,41 +139,33 @@ async def root():
     """Endpoint de salud."""
     return {"status": "ok"}
 
-@app.post("/reset-db")
-async def reset_database():
+@app.post("/reset-users")
+async def reset_users_only():
     """
-    Elimina completamente la base de datos y la recrea.
+    ⚠️ SOLO resetea la tabla de USUARIOS (NO elimina documentos).
     Recrea el usuario admin con credenciales admin/admin.
-    ⚠️ SOLO USAR EN DESARROLLO
+    USO: Solo en desarrollo cuando necesites limpiar usuarios.
     """
     try:
-        # ✅ CAMBIO: Usar ruta relativa en lugar de /tmp
-        db_path = "./mova.db"
+        session = SessionLocal()
+        try:
+            # ✅ ELIMINAR SOLO USUARIOS, NUNCA DOCUMENTOS
+            session.query(Usuario).delete()
+            session.commit()
+        finally:
+            session.close()
         
-        # Cerrar cualquier conexión abierta
-        engine.dispose()
-        
-        # Eliminar el archivo de BD si existe
-        if os.path.exists(db_path):
-            os.remove(db_path)
-        
-        # Eliminar todas las tablas de la BD
-        Base.metadata.drop_all(bind=engine)
-        
-        # Recrear todas las tablas
-        Base.metadata.create_all(bind=engine)
-        
-        # Crear admin nuevamente
+        # Recrear admin
         crear_admin()
         
         return {
-            "mensaje": "✅ Base de datos eliminada y reiniciada correctamente",
+            "mensaje": "✅ Usuarios reseteados - Documentos PRESERVADOS",
             "admin_user": "admin",
             "admin_password": "admin",
-            "login_url": "/docs#/default/login_login_post"
+            "documentos_preservados": True
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al resetear BD: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al resetear usuarios: {str(e)}")
 
 @app.post("/setup-admin")
 async def setup_admin():
@@ -274,7 +265,6 @@ async def actualizar_documento(
         if not doc:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
         
-        # Actualizar solo campos que tengan valores
         if documento.tipo_documento:
             doc.tipo_documento = documento.tipo_documento
         if documento.vigencia_desde:
