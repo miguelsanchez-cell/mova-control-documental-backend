@@ -1,23 +1,95 @@
-from datetime import datetime, timedelta
-from typing import Optional
-
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
-from database import SessionLocal, engine, Base
-from models import Documento, Equipo, User
-from schemas import UserCreate, UserOut
+# === CONFIG ===
+DATABASE_URL = "sqlite:///./test.db"
+SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
-# -------------------------------------------
-# CONFIGURACIÓN BASE
-# -------------------------------------------
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# === MODELS ===
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    rol = Column(String, default="viewer")
+
+class Documento(Base):
+    __tablename__ = "documentos"
+    id = Column(Integer, primary_key=True, index=True)
+    grupo = Column(String)
+    cema = Column(String)
+    comeq = Column(String)
+    tipo_documento = Column(String)
+    vigencia_desde = Column(String)
+    vigencia_hasta = Column(String)
+    estado = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
+# === SECURITY ===
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def hash_password(password):
+    return pwd_context.hash(password)
+
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="No autorizado")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    
+    session = SessionLocal()
+    user = session.query(Usuario).filter(Usuario.username == username).first()
+    session.close()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return {"username": user.username, "rol": user.rol}
+
+# === SCHEMAS ===
+class UsuarioCrear(BaseModel):
+    username: str
+    password: str
+    rol: str = "viewer"
+
+class DocumentoSchema(BaseModel):
+    grupo: str = ""
+    cema: str = ""
+    comeq: str = ""
+    tipo_documento: str = ""
+    vigencia_desde: str = ""
+    vigencia_hasta: str = ""
+    estado: str = ""
+
+# === FastAPI ===
 app = FastAPI()
 
-# CORS para poder llamar desde index.html (en producción limita a tu dominio)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,171 +98,121 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Crear tablas si no existen
-Base.metadata.create_all(bind=engine)
-
-# -------------------------------------------
-# DB DEPENDENCY
-# -------------------------------------------
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# -------------------------------------------
-# AUTH / JWT
-# -------------------------------------------
-SECRET_KEY = "CAMBIA_ESTA_CLAVE_SECRETA_LARGA_Y_UNICA"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
-# Usar pbkdf2_sha256 en vez de bcrypt para evitar problemas de versión
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def get_user_by_username(db: Session, username: str) -> Optional[User]:
-    return db.query(User).filter(User.username == username).first()
-
-
-def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-    user = get_user_by_username(db, username)
-    if not user:
-        return None
-    if not verify_password(password, user.password_hash):
-        return None
-    return user
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-async def get_current_user(
-    db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
-) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales inválidas",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = get_user_by_username(db, username=username)
-    if user is None:
-        raise credentials_exception
-    return user
-
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
-
-
-def require_role(*roles):
-    def checker(current_user: User = Depends(get_current_active_user)) -> User:
-        if current_user.rol not in roles:
-            raise HTTPException(status_code=403, detail="No tiene permisos suficientes")
-        return current_user
-    return checker
-
-# -------------------------------------------
-# RUTAS DE AUTH
-# -------------------------------------------
+# === RUTAS ===
 @app.post("/login")
-async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(status_code=400, detail="Usuario o contraseña incorrectos")
-    access_token = create_access_token(
-        data={"sub": user.username, "rol": user.rol},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    session = SessionLocal()
+    user = session.query(Usuario).filter(Usuario.username == form_data.username).first()
+    session.close()
+    
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    
+    token = create_access_token({"sub": user.username})
     return {
-        "access_token": access_token,
+        "access_token": token,
         "token_type": "bearer",
         "username": user.username,
-        "rol": user.rol,
+        "rol": user.rol
     }
 
-
-@app.get("/me", response_model=UserOut)
-async def read_me(current_user: User = Depends(get_current_active_user)):
+@app.get("/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
-
-@app.post("/register", response_model=UserOut, dependencies=[Depends(require_role("admin"))])
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    # Solo admin puede crear usuarios
-    if get_user_by_username(db, user.username):
+@app.post("/register")
+async def register(usuario: UsuarioCrear, current_user: dict = Depends(get_current_user)):
+    if current_user['rol'] != 'admin':
+        raise HTTPException(status_code=403, detail="Solo admins pueden crear usuarios")
+    
+    session = SessionLocal()
+    existing = session.query(Usuario).filter(Usuario.username == usuario.username).first()
+    if existing:
+        session.close()
         raise HTTPException(status_code=400, detail="Usuario ya existe")
-    db_user = User(
-        username=user.username,
-        password_hash=get_password_hash(user.password),
-        rol="lector",  # todos empiezan como lector
+    
+    new_user = Usuario(
+        username=usuario.username,
+        password_hash=hash_password(usuario.password),
+        rol=usuario.rol
     )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
-# -------------------------------------------
-# RUTAS EXISTENTES DOCUMENTOS
-# -------------------------------------------
-@app.get("/")
-def read_root():
-    return {"message": "API funcionando"}
-
+    session.add(new_user)
+    session.commit()
+    session.close()
+    
+    return {"mensaje": "Usuario creado", "username": usuario.username, "rol": usuario.rol}
 
 @app.get("/documentos")
-def listar_documentos(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),  # requiere login
-):
-    filas = (
-        db.query(Documento, Equipo)
-        .join(Equipo, Documento.equipo_id == Equipo.id)
-        .all()
-    )
+async def get_documentos(current_user: dict = Depends(get_current_user)):
+    session = SessionLocal()
+    docs = session.query(Documento).all()
+    session.close()
+    
+    return [
+        {
+            "id": d.id,
+            "grupo": d.grupo,
+            "cema": d.cema,
+            "comeq": d.comeq,
+            "tipo_documento": d.tipo_documento,
+            "vigencia_desde": d.vigencia_desde,
+            "vigencia_hasta": d.vigencia_hasta,
+            "estado": d.estado
+        }
+        for d in docs
+    ]
 
-    resultado = []
-    for doc, eq in filas:
-        resultado.append(
-            {
-                "id": doc.id,
-                "tipo_documento": doc.tipo_documento,
-                "grupo": eq.grupo,
-                "cema": eq.cema,
-                "comeq": eq.comeq,
-                "estado": eq.estado,
-                "vigencia_desde": doc.vigencia_desde.isoformat()
-                if doc.vigencia_desde
-                else None,
-                "vigencia_hasta": doc.vigencia_hasta.isoformat()
-                if doc.vigencia_hasta
-                else None,
-            }
+@app.put("/documentos/{doc_id}")
+async def actualizar_documento(
+    doc_id: int,
+    documento: DocumentoSchema,
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user['rol'] not in ['admin', 'editor']:
+        raise HTTPException(status_code=403, detail="No tiene permiso para editar")
+    
+    session = SessionLocal()
+    doc = session.query(Documento).filter(Documento.id == doc_id).first()
+    
+    if not doc:
+        session.close()
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    if documento.tipo_documento:
+        doc.tipo_documento = documento.tipo_documento
+    if documento.vigencia_desde:
+        doc.vigencia_desde = documento.vigencia_desde
+    if documento.vigencia_hasta:
+        doc.vigencia_hasta = documento.vigencia_hasta
+    if documento.estado:
+        doc.estado = documento.estado
+    if documento.grupo:
+        doc.grupo = documento.grupo
+    if documento.cema:
+        doc.cema = documento.cema
+    if documento.comeq:
+        doc.comeq = documento.comeq
+    
+    session.commit()
+    session.close()
+    
+    return {"mensaje": "Documento actualizado correctamente", "id": doc_id}
+
+def crear_admin_inicial():
+    session = SessionLocal()
+    admin = session.query(Usuario).filter(Usuario.username == "admin").first()
+    if not admin:
+        admin = Usuario(
+            username="admin",
+            password_hash=hash_password("admin"),
+            rol="admin"
         )
-    return resultado
+        session.add(admin)
+        session.commit()
+    session.close()
+
+if __name__ == "__main__":
+    crear_admin_inicial()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
