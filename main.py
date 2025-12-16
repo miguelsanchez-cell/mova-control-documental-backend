@@ -16,7 +16,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # === CONFIG ===
-DATABASE_URL = "sqlite:///./test.db"
+# CAMBIO IMPORTANTE: Usar /tmp para Railway (writable)
+DATABASE_URL = "sqlite:////tmp/test.db"
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440
@@ -304,4 +305,5 @@ if __name__ == "__main__":
     import uvicorn
     crear_admin_inicial()
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
