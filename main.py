@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 import logging
+import os
 
 # === LOGGING ===
 logging.basicConfig(level=logging.INFO)
@@ -114,15 +115,19 @@ def crear_admin_inicial():
                 session.add(admin_user)
                 session.commit()
                 logger.info("✅ Usuario admin creado exitosamente")
+                return True
             else:
-                logger.info("✅ Usuario admin ya existe")
+                logger.info("ℹ️ Usuario admin ya existe")
+                return True
         except Exception as e:
             logger.error(f"❌ Error creando admin: {e}")
             session.rollback()
+            return False
         finally:
             session.close()
     except Exception as e:
         logger.error(f"❌ Error en crear_admin_inicial: {e}")
+        return False
 
 # === FastAPI ===
 app = FastAPI()
@@ -135,7 +140,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ⚠️ CREAR ADMIN AQUÍ - Se ejecuta cuando se inicia la app
+# ⚠️ CREAR ADMIN AL INICIAR
+logger.info("🚀 Iniciando aplicación...")
 crear_admin_inicial()
 
 # === RUTAS ===
@@ -143,6 +149,15 @@ crear_admin_inicial()
 async def root():
     """Health check endpoint"""
     return {"status": "ok", "message": "API está funcionando correctamente"}
+
+@app.post("/setup-admin")
+async def setup_admin():
+    """Endpoint para crear el admin manualmente (útil para Railway)"""
+    success = crear_admin_inicial()
+    if success:
+        return {"mensaje": "✅ Admin setup completado"}
+    else:
+        raise HTTPException(status_code=500, detail="Error creando admin")
 
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
