@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Mantenimiento MOVA - Control Documental</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --mova-amarillo:#f8b400;
+      --mova-amarillo-osc:#d89200;
+      --mova-azul:#0a2342;
+    }
+
+    *{box-sizing:border-box;}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      color:#fff;
+      background:#f5f7fb;
+    }
+
+    /* LOGIN MODAL */
+    #loginModal .modal-content {
+      background: linear-gradient(135deg, rgba(10,35,66,0.95), rgba(25,59,112,0.95));
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    #loginModal .form-control:focus {
+      border-color: var(--mova-amarillo);
+      box-shadow: 0 0 0 0.2rem rgba(248,180,0,0.25);
+    }
+
+    /* ---------- LANDING ---------- */
+    #hero{
+      min-height:100vh;
+      width:100%;
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      color:#fff;
+      background:
+        linear-gradient(rgba(0,0,0,0.35),rgba(0,0,0,0.55)),
+        url("C:/Users/misanchez/Documents/CONTROL DOCUMENTAL/imagen mova.png")
+        center center / cover no-repeat;
+    }
+
+    .hero-brand{
+      position:absolute;
+      top:12px;
+      left:16px;
+      padding:.4rem 1.2rem;
+      border-radius:999px;
+      background:rgba(0,0,0,0.75);
+      box-shadow:0 0 18px rgba(0,0,0,0.8);
+      letter-spacing:.12em;
+      font-weight:600;
+      text-transform:uppercase;
+      font-size:.85rem;
+    }
+
+    .hero-card{
+      max-width:520px;
+      width:90%;
+      padding:2.5rem 2.8rem;
+      border-radius:24px;
+      background:linear-gradient(135deg,rgba(0,0,0,0.45),rgba(0,0,0,0.25));
+      box-shadow:0 24px 60px rgba(0,0,0,0.75);
+      backdrop-filter:blur(10px);
+      border:1px solid rgba(255,255,255,0.25);
+    }
+
+    .hero-logo{
+      font-size:2.6rem;
+      font-weight:800;
+      letter-spacing:.15em;
+    }
+
+    .hero-subtitle{
+      font-size:.95rem;
+      text-transform:uppercase;
+      letter-spacing:.28em;
+      color:rgba(255,255,255,0.9);
+    }
+
+    .hero-divider{
+      width:80px;
+      height:2px;
+      margin:1.1rem auto 1.7rem;
+      background:linear-gradient(90deg,var(--mova-amarillo),var(--mova-amarillo-osc));
+      border-radius:999px;
+    }
+
+    .hero-text{
+      font-size:1.02rem;
+      color:rgba(255,255,255,0.95);
+    }
+
+    .hero-buttons .btn{
+      min-width:9.5rem;
+      padding:.75rem 1.6rem;
+      border-radius:999px;
+      font-weight:600;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-size:.83rem;
+    }
+
+    .btn-mova-primary{
+      background:linear-gradient(135deg,var(--mova-amarillo),var(--mova-amarillo-osc));
+      border:none;
+      color:#111;
+      box-shadow:0 14px 30px rgba(0,0,0,0.75);
+    }
+    .btn-mova-primary:hover{
+      filter:brightness(1.08);
+      transform:translateY(-1px);
+    }
+
+    .btn-mova-outline{
+      border:1px solid rgba(255,255,255,0.8);
+      color:#fff;
+      background:rgba(0,0,0,0.25);
+    }
+    .btn-mova-outline:hover{
+      background:rgba(255,255,255,0.15);
+    }
+
+    /* ---------- DASHBOARD SECTION ---------- */
+    #app-dashboard{
+      display:none;
+      background:#f5f7fb;
+      color:#111;
+      min-height:100vh;
+      padding:0;
+    }
+
+    .dashboard-card{
+      border-radius:18px;
+      border:none;
+      box-shadow:0 16px 40px rgba(10,35,66,0.18);
+      overflow:hidden;
+    }
+
+    .dashboard-header{
+      background:linear-gradient(120deg,#0a2342,#193b70);
+      color:#fff;
+      padding:1rem 1.5rem;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:1rem;
+      position: relative;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255,255,255,0.1);
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+    }
+
+    .user-role {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .btn-logout {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      padding: 0.4rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+    }
+
+    .dashboard-title{
+      font-size:1.2rem;
+      font-weight:600;
+    }
+
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:.35rem;
+      border-radius:999px;
+      padding:.25rem .75rem;
+      background:rgba(255,255,255,0.09);
+      font-size:.8rem;
+    }
+
+    .filtros-bar{
+      background:#e3f4ff;
+      padding:.85rem;
+      display:flex;
+      flex-wrap:wrap;
+      gap:.55rem;
+      align-items:center;
+      border-bottom:1px solid #d0e2ff;
+    }
+
+    .filtros-bar label{
+      font-size:.8rem;
+      font-weight:600;
+      margin-right:.2rem;
+      color:#214060;
+    }
+
+    .filtros-bar .form-select,
+    .filtros-bar .form-control{
+      font-size:.8rem;
+      padding:.25rem .5rem;
+      border-radius:999px;
+    }
+
+    /* ADMIN PANEL (ahora solo placeholder visual, gestión se hace por backend) */
+    #adminPanel {
+      display: none;
+      background: rgba(248,180,0,0.1);
+      border: 2px solid var(--mova-amarillo);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .table-responsive{
+      max-height:calc(100vh - 200px);
+      overflow:auto;
+    }
+
+    thead th{
+      position:sticky;
+      top:0;
+      z-index:2;
+      background:#f0f6ff;
+    }
+
+    thead tr:first-child th{
+      top:0;
+      background:#d8e7ff;
+      z-index:3;
+    }
+
+    thead tr:nth-child(2) th{
+      top:36px;
+      background:#edf3ff;
+    }
+
+    th.documento{
+      background:#d4f3f0;
+      color:#006b6b;
+      border-right:2px solid #0a2342;
+    }
+
+    .table-editar td.readonly {
+      background: #f8f9fa !important;
+      color: #6c757d;
+    }
+
+    .table-editar td.readonly[contenteditable="true"] {
+      background: #e9ecef !important;
+      cursor: not-allowed;
+    }
+
+    #conteoFiltrados{
+      font-size:.8rem;
+      color:#4b5c7a;
+    }
+
+    @media (max-width:576px){
+      .hero-card{padding:1.8rem 1.4rem;}
+      .hero-logo{font-size:2.1rem;}
+      .hero-brand{font-size:.75rem;}
+      .filtros-bar{flex-direction:column;align-items:stretch;}
+      .table-responsive{max-height:calc(100vh - 220px);}
+      .dashboard-header { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN MODAL -->
+<div class="modal fade" id="loginModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-white">Acceso al Sistema</h5>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label text-white">Usuario</label>
+          <input type="text" class="form-control" id="loginUsuario">
+        </div>
+        <div class="mb-3">
+          <label class="form-label text-white">Contraseña</label>
+          <input type="password" class="form-control" id="loginPassword">
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-mova-primary flex-fill" onclick="login()">Ingresar</button>
+        </div>
+        <hr>
+        <div class="text-center">
+          <small class="text-white-50">Admin inicial: <strong>admin / admin</strong></small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HERO / LANDING -->
+<section id="hero">
+  <div class="hero-brand">MANTENIMIENTO MOVA</div>
+
+  <div class="hero-card">
+    <div class="hero-subtitle">Plataforma de gestión</div>
+    <div class="hero-logo mt-1">MOVA MM&E</div>
+    <div class="hero-divider"></div>
+    <p class="hero-text mb-4">
+      Controla la vigencia de SOAT, pólizas Todo Riesgo y Tecnomecánica de toda tu flota en un solo panel visual y fácil de usar.
+    </p>
+
+    <div class="hero-buttons d-flex justify-content-center gap-3 flex-wrap">
+      <button class="btn btn-mova-primary" onclick="mostrarLogin()">Ingresar</button>
+    </div>
+
+    <div class="hero-meta">
+      Datos en tiempo real desde tu API · Alertas por fechas de vencimiento · Exportación rápida a Excel
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="app-dashboard">
+  <div class="container-fluid px-3 py-3">
+    <div class="card dashboard-card">
+      <div class="dashboard-header">
+        <div>
+          <div class="dashboard-title">Dashboard Control Documental</div>
+          <small class="text-light-50">SOAT · Todo Riesgo · Tecnomecánica</small>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="chip">
+            <span class="badge bg-success rounded-pill" style="width:9px;height:9px;"></span>
+            Conectado a API
+          </span>
+          <div id="userInfo" class="user-info" style="display:none;">
+            <span id="userName"></span>
+            <span id="userRole" class="user-role"></span>
+            <button class="btn btn-sm btn-logout ms-1" onclick="logout()">Salir</button>
+          </div>
+          <button class="btn btn-sm btn-outline-light" id="adminBtn" style="display:none;" onclick="toggleAdminPanel()">👥 Usuarios (solo admin)</button>
+          <button class="btn btn-sm btn-outline-light" onclick="exportarFiltrados()">💾 Exportar Excel (vista actual)</button>
+          <span id="conteoFiltrados"></span>
+        </div>
+      </div>
+
+      <!-- ADMIN PANEL: solo información -->
+      <div id="adminPanel">
+        <h6>Gestión de Usuarios</h6>
+        <p class="mb-1">
+          La creación y edición de usuarios se hace desde la API protegida (solo rol ADMIN). 
+        </p>
+        <p class="small text-muted mb-0">
+          Para crear usuarios nuevos, usa el endpoint <code>/register</code> autenticado como admin.
+        </p>
+      </div>
+
+      <div class="filtros-bar">
+        <div class="d-flex align-items-center gap-1">
+          <label for="filtroGrupo">Grupo</label>
+          <select id="filtroGrupo" class="form-select form-select-sm" style="width:110px">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <label for="filtroCema">Cema</label>
+          <select id="filtroCema" class="form-select form-select-sm" style="width:110px">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <label for="filtroComeq">Comeq</label>
+          <select id="filtroComeq" class="form-select form-select-sm" style="width:110px">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <label for="filtroEstado">Estado</label>
+          <select id="filtroEstado" class="form-select form-select-sm" style="width:130px">
+            <option value="">Todos</option>
+            <option value="operativo">Operativo</option>
+            <option value="mantenimiento">Mantenimiento</option>
+            <option value="fuera de servicio">Fuera de servicio</option>
+          </select>
+        </div>
+
+        <div class="d-flex align-items-center gap-1">
+          <label>SOAT</label>
+          <input type="date" id="filtroSOATDesde" class="form-control form-control-sm">
+          <input type="date" id="filtroSOATHasta" class="form-control form-control-sm">
+        </div>
+
+        <div class="d-flex align-items-center gap-1">
+          <label>Tecno</label>
+          <input type="date" id="filtroTecnoDesde" class="form-control form-control-sm">
+          <input type="date" id="filtroTecnoHasta" class="form-control form-control-sm">
+        </div>
+
+        <div class="d-flex align-items-center gap-1">
+          <label>Riesgo</label>
+          <input type="date" id="filtroRiesgoDesde" class="form-control form-control-sm">
+          <input type="date" id="filtroRiesgoHasta" class="form-control form-control-sm">
+        </div>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <input class="form-control form-control-sm" style="min-width:180px" id="busquedaTexto"
+                 onkeyup="buscarTexto()" placeholder="Buscar en toda la tabla...">
+          <button class="btn btn-sm btn-primary" onclick="filtrarTabla()">Filtrar</button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0 table-editar" id="tablaDocumental">
+          <thead>
+          <tr>
+            <th>Grupo</th>
+            <th>Cema</th>
+            <th>Comeq</th>
+            <th>Estado</th>
+            <th colspan="2" class="documento">SOAT</th>
+            <th colspan="2" class="documento">Todo Riesgo</th>
+            <th colspan="2" class="documento">Tecnomecánica</th>
+          </tr>
+          <tr>
+            <th></th><th></th><th></th><th></th>
+            <th>Vigencia Desde</th>
+            <th>Vigencia Hasta</th>
+            <th>Vigencia Desde</th>
+            <th>Vigencia Hasta</th>
+            <th>Vigencia Desde</th>
+            <th>Vigencia Hasta</th>
+          </tr>
+          </thead>
+          <tbody id="bodyDocumental"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script>
+  const API_BASE = "http://127.0.0.1:8000"; // cambia esto cuando lo subas a web
+
+  let token = null;
+  let usuarioActual = null;
+  let registros = [];
+  let registrosFiltrados = [];
+
+  function mostrarLogin() {
+    const modal = new bootstrap.Modal(document.getElementById('loginModal'));
+    // restaurar contenido del modal por si se modificó antes
+    document.querySelector('#loginModal .modal-title').textContent = 'Acceso al Sistema';
+    document.querySelector('#loginModal .modal-body').innerHTML = `
+      <div class="mb-3">
+        <label class="form-label text-white">Usuario</label>
+        <input type="text" class="form-control" id="loginUsuario">
+      </div>
+      <div class="mb-3">
+        <label class="form-label text-white">Contraseña</label>
+        <input type="password" class="form-control" id="loginPassword">
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-mova-primary flex-fill" onclick="login()">Ingresar</button>
+      </div>
+      <hr>
+      <div class="text-center">
+        <small class="text-white-50">Admin inicial: <strong>admin / admin</strong></small>
+      </div>
+    `;
+    modal.show();
+  }
+
+  async function login() {
+    const usuario = document.getElementById('loginUsuario').value;
+    const password = document.getElementById('loginPassword').value;
+
+    const data = new URLSearchParams();
+    data.append('username', usuario);
+    data.append('password', password);
+
+    try {
+      const res = await fetch(`${API_BASE}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: data
+      });
+
+      if (!res.ok) {
+        alert('Usuario o contraseña incorrectos');
+        return;
+      }
+
+      const result = await res.json();
+      token = result.access_token;
+      usuarioActual = { username: result.username, rol: result.rol };
+
+      localStorage.setItem('movaToken', token);
+      localStorage.setItem('movaUser', JSON.stringify(usuarioActual));
+
+      bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
+      entrarApp();
+    } catch (e) {
+      console.error(e);
+      alert('Error conectando con el servidor');
+    }
+  }
+
+  function entrarApp() {
+    if (!usuarioActual) {
+      mostrarLogin();
+      return;
+    }
+    document.getElementById('hero').style.display = 'none';
+    document.getElementById('app-dashboard').style.display = 'block';
+
+    document.getElementById('userName').textContent = usuarioActual.username;
+    document.getElementById('userRole').textContent = usuarioActual.rol.toUpperCase();
+    document.getElementById('userInfo').style.display = 'flex';
+
+    if (usuarioActual.rol === 'admin') {
+      document.getElementById('adminBtn').style.display = 'inline-block';
+    } else {
+      document.getElementById('adminBtn').style.display = 'none';
+    }
+
+    cargarDatos();
+  }
+
+  function logout() {
+    token = null;
+    usuarioActual = null;
+    localStorage.removeItem('movaToken');
+    localStorage.removeItem('movaUser');
+    document.getElementById('app-dashboard').style.display = 'none';
+    document.getElementById('hero').style.display = 'flex';
+    document.getElementById('userInfo').style.display = 'none';
+  }
+
+  function toggleAdminPanel() {
+    const panel = document.getElementById('adminPanel');
+    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+  }
+
+  function guardarLocal() {
+    localStorage.setItem("morenoRegistrosV2", JSON.stringify(registros));
+  }
+
+  function transformarDocumentosADashboard(docs) {
+    const porEquipo = {};
+    docs.forEach(d => {
+      const key = `${d.grupo}||${d.cema}||${d.comeq}`;
+      if (!porEquipo[key]) {
+        porEquipo[key] = {
+          grupo: d.grupo,
+          cema: d.cema,
+          comeq: d.comeq,
+          estado: d.estado || "",
+          SOAT_Desde: "",
+          SOAT_Hasta: "",
+          Riesgo_Desde: "",
+          Riesgo_Hasta: "",
+          Tecno_Desde: "",
+          Tecno_Hasta: ""
+        };
+      }
+      const desde = d.vigencia_desde || null;
+      const hasta = d.vigencia_hasta || null;
+
+      if (d.tipo_documento.startsWith("030. SOAT")) {
+        if (desde) porEquipo[key].SOAT_Desde = desde;
+        if (hasta) porEquipo[key].SOAT_Hasta = hasta;
+      } else if (d.tipo_documento.startsWith("035. Todo Riesgo")) {
+        if (desde) porEquipo[key].Riesgo_Desde = desde;
+        if (hasta) porEquipo[key].Riesgo_Hasta = hasta;
+      } else if (d.tipo_documento.startsWith("037. Revision Tecnomecanica")) {
+        if (desde) porEquipo[key].Tecno_Desde = desde;
+        if (hasta) porEquipo[key].Tecno_Hasta = hasta;
+      }
+    });
+    return Object.values(porEquipo);
+  }
+
+  async function cargarDatos() {
+    if (!token) {
+      const storedToken = localStorage.getItem('movaToken');
+      if (!storedToken) return;
+      token = storedToken;
+    }
+
+    try{
+      const res = await fetch(`${API_BASE}/documentos`, {
+        headers: {
+          'Authorization': 'Bearer ' + token
+        }
+      });
+
+      if (res.status === 401) {
+        alert('Sesión expirada, vuelve a iniciar sesión');
+        logout();
+        return;
+      }
+
+      const docs = await res.json();
+      registros = transformarDocumentosADashboard(docs);
+      guardarLocal();
+    }catch(e){
+      console.error('No se pudo cargar la API, usando datos locales si existen.', e);
+      const cache = localStorage.getItem("morenoRegistrosV2");
+      if (cache) registros = JSON.parse(cache);
+    }
+    llenarFiltros();
+    mostrarTablaDocumental();
+  }
+
+  function llenarFiltros() {
+    const grupos = [...new Set(registros.map(a => a.grupo))].filter(x=>x);
+    const cemas  = [...new Set(registros.map(a => a.cema))].filter(x=>x);
+    const comeqs = [...new Set(registros.map(a => a.comeq))].filter(x=>x);
+    document.getElementById('filtroGrupo').innerHTML =
+      '<option value="">Todos</option>' + grupos.map(x=>`<option value="${x}">${x}</option>`).join('');
+    document.getElementById('filtroCema').innerHTML  =
+      '<option value="">Todos</option>' + cemas.map(x=>`<option value="${x}">${x}</option>`).join('');
+    document.getElementById('filtroComeq').innerHTML =
+      '<option value="">Todos</option>' + comeqs.map(x=>`<option value="${x}">${x}</option>`).join('');
+  }
+
+  function puedeEditar() {
+    return usuarioActual && (usuarioActual.rol === 'admin' || usuarioActual.rol === 'editor');
+  }
+
+  function mostrarTablaDocumental(data=null) {
+    let regs = data || registros;
+    registrosFiltrados = regs;
+    let html = '';
+    regs.forEach((a, idx) => {
+      const editable = puedeEditar();
+      html += `
+        <tr>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'grupo',this.innerText)">${a.grupo}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'cema',this.innerText)">${a.cema}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'comeq',this.innerText)">${a.comeq}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'estado',this.innerText)">${a.estado}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'SOAT_Desde',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.SOAT_Desde}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'SOAT_Hasta',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.SOAT_Hasta}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'Riesgo_Desde',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.Riesgo_Desde}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'Riesgo_Hasta',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.Riesgo_Hasta}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'Tecno_Desde',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.Tecno_Desde}</td>
+          <td contenteditable="${editable}" onblur="editarCampo(${idx},'Tecno_Hasta',this.innerText)" class="${!editable ? 'readonly' : ''}">${a.Tecno_Hasta}</td>
+        </tr>`;
+    });
+    document.getElementById('bodyDocumental').innerHTML = html;
+    document.getElementById('conteoFiltrados').innerText =
+      `Mostrando ${regs.length} equipos`;
+  }
+
+  function editarCampo(idx, campo, valor) {
+    if (!puedeEditar()) return;
+    // Por ahora solo se actualiza en la vista/localStorage;
+    // cuando tengas endpoint PUT en FastAPI, aquí se hará un fetch al backend.
+    const ref = registrosFiltrados[idx];
+    const originalIndex = registros.findIndex(r =>
+      r.grupo === ref.grupo && r.cema === ref.cema && r.comeq === ref.comeq
+    );
+    if (originalIndex !== -1) {
+      registros[originalIndex][campo] = valor.trim();
+      guardarLocal();
+      mostrarTablaDocumental(registrosFiltrados);
+    }
+  }
+
+  function filtrarTabla() {
+    let grupo       = document.getElementById('filtroGrupo').value;
+    let cema        = document.getElementById('filtroCema').value;
+    let comeq       = document.getElementById('filtroComeq').value;
+    let estado      = document.getElementById('filtroEstado').value;
+    let soatDesde   = document.getElementById('filtroSOATDesde').value;
+    let soatHasta   = document.getElementById('filtroSOATHasta').value;
+    let tecnoDesde  = document.getElementById('filtroTecnoDesde').value;
+    let tecnoHasta  = document.getElementById('filtroTecnoHasta').value;
+    let riesgoDesde = document.getElementById('filtroRiesgoDesde').value;
+    let riesgoHasta = document.getElementById('filtroRiesgoHasta').value;
+
+    let filtradas = registros.filter(a => {
+      let ok = true;
+      if (grupo)  ok = ok && a.grupo === grupo;
+      if (cema)   ok = ok && a.cema === cema;
+      if (comeq)  ok = ok && a.comeq === comeq;
+      if (estado) ok = ok && a.estado === estado;
+
+      if (soatDesde) ok = ok && a.SOAT_Hasta && new Date(a.SOAT_Hasta) >= new Date(soatDesde);
+      if (soatHasta) ok = ok && a.SOAT_Hasta && new Date(a.SOAT_Hasta) <= new Date(soatHasta);
+
+      if (tecnoDesde) ok = ok && a.Tecno_Hasta && new Date(a.Tecno_Hasta) >= new Date(tecnoDesde);
+      if (tecnoHasta) ok = ok && a.Tecno_Hasta && new Date(a.Tecno_Hasta) <= new Date(tecnoHasta);
+
+      if (riesgoDesde) ok = ok && a.Riesgo_Hasta && new Date(a.Riesgo_Hasta) >= new Date(riesgoDesde);
+      if (riesgoHasta) ok = ok && a.Riesgo_Hasta && new Date(a.Riesgo_Hasta) <= new Date(riesgoHasta);
+
+      return ok && (a.grupo || a.cema || a.comeq);
+    });
+
+    mostrarTablaDocumental(filtradas);
+  }
+
+  function buscarTexto() {
+    let texto = document.getElementById('busquedaTexto').value.toLowerCase();
+    let filtradas = registros.filter(a =>
+      Object.values(a).join(' ').toLowerCase().includes(texto)
+    );
+    mostrarTablaDocumental(filtradas);
+  }
+
+  function exportarFiltrados(){
+    if (!registrosFiltrados.length){
+      alert('No hay registros para exportar.');
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(registrosFiltrados);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Filtrados");
+    XLSX.writeFile(wb, `mova_control_documental_${registrosFiltrados.length}_registros.xlsx`);
+  }
+
+  // Auto-login si existe token
+  window.onload = () => {
+    const storedUser = localStorage.getItem('movaUser');
+    const storedToken = localStorage.getItem('movaToken');
+    if (storedUser && storedToken) {
+      usuarioActual = JSON.parse(storedUser);
+      token = storedToken;
+      entrarApp();
+    }
+  };
+</script>
+</body>
+</html>
+
+
